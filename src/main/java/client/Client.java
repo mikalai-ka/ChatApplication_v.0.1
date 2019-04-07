@@ -33,6 +33,7 @@ class Client{
 		pool.execute(new RecieverThread(sk));
     }
 
+    
     private class RecieverThread implements Runnable { 	
     	Socket socket;
         
@@ -46,32 +47,14 @@ class Client{
         			
         		while(true){
         			String s=sin.readLine();
-        			//System.out.println("Got message from server"+s);
-        			String message, userUniqueIdString, userRoomIdString;
-        			message = s.substring(0, s.indexOf("\\u"));
-        			System.out.print(message+"\n");
-        			
-        			userUniqueIdString=s.substring(s.indexOf("\\u")+2, s.indexOf("\\r"));
-        			userRoomIdString = s.substring(s.indexOf("\\r")+2, s.indexOf("\\e"));
-        			
-        			Long userUniqueId = Long.parseLong(userUniqueIdString);
-        			Long userRoomId = Long.parseLong(userRoomIdString);
-        			
-        			if (userId == 0 && userUniqueId > 0) {				
-        				userId = userUniqueId;
-        			}
-        			if (roomId == 0 && userRoomId > 0) {
-        				roomId = userRoomId;
-        			}
-        			if (userRoomId == 0 && roomId > 0) {
-        				roomId=0;
-        			}       			
+        			messageHandler(s);
         		}        		
         	}catch(IOException e){
         		System.out.println("Stopped get messages from server");
-        		}
-        	}
-        } 
+        		
+        	}        	        	
+        }        
+    } 
     
     private class SendThread implements Runnable { 	
     	Socket socket;
@@ -97,9 +80,30 @@ class Client{
                     }
         		}        		
         	}catch(IOException e){
-        			e.printStackTrace();
-        		}
+        		System.out.println("Stopped sending messages to server");	
+        	}
         }
    }
+    void messageHandler(String s) {
+		String message, userUniqueIdString, userRoomIdString;
+		message = s.substring(0, s.indexOf("\\u"));
+		System.out.print(message+"\n");
+		
+		userUniqueIdString=s.substring(s.indexOf("\\u")+2, s.indexOf("\\r"));
+		userRoomIdString = s.substring(s.indexOf("\\r")+2, s.indexOf("\\e"));
+		
+		Long userUniqueId = Long.parseLong(userUniqueIdString);
+		Long userRoomId = Long.parseLong(userRoomIdString);
+		
+		if (userId == 0 && userUniqueId > 0) {				
+			userId = userUniqueId;
+		}
+		if (roomId == 0 && userRoomId > 0) {
+			roomId = userRoomId;
+		}
+		if (userRoomId == 0 && roomId > 0) {
+			roomId=0;
+		}
+    }
     
 }

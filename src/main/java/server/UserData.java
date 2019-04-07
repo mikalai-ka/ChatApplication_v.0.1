@@ -6,7 +6,7 @@ class UserData {
 	private Socket userSocket;
 	private String name;
 	private long userId;
-	private boolean isAgent;
+	private boolean isAgent = false;
 	private boolean inChat = false;
 	
 	public UserData(Socket userSocket, String name, long userId, boolean isAgent) {
@@ -16,6 +16,12 @@ class UserData {
 		this.isAgent = isAgent;
 	}
 	
+	public UserData(Socket userSocket, String name, long userId) {
+		this.userSocket = userSocket;
+		this.name = name;
+		this.userId = userId;
+	}
+
 	public Socket getUserSocket() {
 		return userSocket;
 	}
@@ -33,5 +39,8 @@ class UserData {
 	}
 	public void setInChat(boolean inChat) {
 		this.inChat=inChat;
+	}
+	public void setIsAgent(boolean isAgent) {
+		this.isAgent=isAgent;
 	}
 }

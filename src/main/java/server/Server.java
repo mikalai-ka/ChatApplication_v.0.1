@@ -24,43 +24,42 @@ import java.util.concurrent.atomic.AtomicLong;
 public class Server {
 	
 
-    private ServerSocket serverS;
-    private Socket clientS;
+
+    private final int port=25864;
     private ExecutorService pool = null;
     private AtomicLong userCount = new AtomicLong();
     private AtomicLong chatCount = new AtomicLong();
     private boolean running;
     private Vector <UserData> users = new Vector<>();
     private Vector <ChatRoom> chats = new Vector<>();
-    DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
+    DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS");
     
-    
+    /*
     Server (int port) {
-    	try {
-    		serverS=new ServerSocket(port);
-    		pool = Executors.newFixedThreadPool(10);
-    		running=true;
-    		System.out.println(dateFormat.format(new Date())+" - Server started on port: "+port);
-    		listen();
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
+    	this.port = port;
+
+    }
+    */
+    public void start() throws IOException {
+
+		pool = Executors.newFixedThreadPool(10);
+		running=true;		
+		ServerSocket ss = new ServerSocket(port);
+		System.out.println(dateFormat.format(new Date())+" - Server started on port: "+port);
+		listen(ss);
+    	
     }
     
-    private void listen(){
-        while(running)
-        {
-        	try {
-        		clientS=serverS.accept();
-        		ServerThread runnable= new ServerThread(clientS);
+    private void listen(ServerSocket serverS) throws IOException{
+        while(running){
+        		Socket clientSocket = serverS.accept();
+        		ServerThread runnable= new ServerThread(clientSocket);
         		pool.execute(runnable);
-        	}catch(IOException e) {
-        		e.printStackTrace();
         	}
         }  	
-    }
     
-    private class ServerThread implements Runnable { 	
+    
+    class ServerThread implements Runnable { 	
 		String line;
 		Socket client;
     
@@ -84,17 +83,17 @@ public class Server {
     		}
     	}
     }
-    private void messageManager(Socket userSocket, String s) {
-		String message, userUniqueIdString, userRoomIdString;		
+    public void messageManager(Socket userSocket, String s) {
+		String message, userUniqueIdString, userRoomIdString;
+
 		message = s.substring(0, s.indexOf("\\u"));
 		userUniqueIdString=s.substring(s.indexOf("\\u")+2, s.indexOf("\\r"));
 		userRoomIdString = s.substring(s.indexOf("\\r")+2, s.indexOf("\\e"));
 		
 		long senderId = Long.parseLong(userUniqueIdString);
-		long userRoomId = Long.parseLong(userRoomIdString);
-		
-		
+		long userRoomId = Long.parseLong(userRoomIdString);		
 		UserData newClient = getUserInfoByUserId(senderId);
+		
 		//System.out.println("user ID "+senderId);
 		if (senderId == 0 && !(message.startsWith("#login"))) {
 			send(userSocket, "System: You have to login first", senderId, userRoomId);
@@ -102,8 +101,8 @@ public class Server {
 		}
     	
 		//COMMAND
-		if (message.startsWith("#")) {
-			System.out.println("Command block");
+		else if (message.startsWith("#")) {
+			//System.out.println("Command block");
 			command(userSocket, message, senderId, userRoomId);
 		}
 		
@@ -115,22 +114,20 @@ public class Server {
 			}
 			else {
 				//CREATE NEW ROOM
-				long chatRoomId = chatCount.incrementAndGet();
-				
-				ChatRoom newChatRoom = createNewChatRoom(senderId, (newClient.getName() + " : "+message), chatRoomId);
-				newClient.setInChat(true);
+							
+				ChatRoom newChatRoom = createNewChatRoom(senderId, message);
 				
 				//ADD AGENT TO CHAT
 				UserData availableAgent = checkFreeAgent();				
 				if (null == availableAgent) {
 					System.out.println("No agents");
-					send(userSocket,"System: No agents. Wait for agent.", newChatRoom.getClientId(), newChatRoom.getId());
+					send(userSocket,"System: No agents. Wait for agent.", senderId, newChatRoom.getId());
 					System.out.println(dateFormat.format(new Date())+" - No free agents. Customer waits for agent");	
 					
 				}
 				else {
 					System.out.println("Add agent");
-					addAgentToChatRoom(newChatRoom, availableAgent);
+					addAgentToChatRoom(newChatRoom, availableAgent.getUserId());
 				}							
 			}
 		}
@@ -151,42 +148,36 @@ public class Server {
 				send(userSocket, "Invalid command. You have already logged in",senderId,-1);
 			}
 			else {
-				System.out.println("New client");
-				long userId = userCount.incrementAndGet();				
+				//System.out.println("New client");
 				String name = message.substring(message.indexOf(":")+1);
+				boolean isAgent = true;
+				String textMessage = "System: Greetings, agent "+name+"! Wait for new chat";
 				
 				if (message.startsWith("#login-client")) {
-					
-					users.add(new UserData(userSocket, name, userId, false));
-					send(userSocket,"System: Greetings, "+name+"! Please send message to start chat with the agent.",userId,0); 
-					System.out.println(dateFormat.format(new Date())+" - User "+name+" is connected as Client. UserId: "+userId );
-		
+					isAgent = false;
+					textMessage = "System: Greetings, "+name+"! Please send message to start chat with the agent.";
 				}
-				else if (message.startsWith("#login-agent")) {
-					
-					UserData newAgent = new UserData(userSocket, name, userId, true);
-					
-					users.add(newAgent);
-					send(userSocket, "System: Greetings, agent "+name+"!",userId,0);
-					System.out.println(dateFormat.format(new Date())+" - User "+name+" is connected as Agent.  UserId: "+userId);
-					
-					
-					//CHECK ACTIVE CHAT WITHOUT AGENT
+				long userId = registerUser(userSocket, name, isAgent);
+				send(userSocket,textMessage,userId,0);
+				
+				//CHECK ACTIVE CHAT WITHOUT AGENT FOR NEW AGENT
+				if (isAgent = true) {
 					ChatRoom room = chatWithoutAgent();
 					
 					if (!(null == chatWithoutAgent())) {
-						addAgentToChatRoom(room, newAgent);
-					}
-					
+						addAgentToChatRoom(room, userId);
+					}					
 				}
 			}
 		}
+		
 		else if (message.startsWith("#close")){
 			for (int i =0; i<chats.size(); i++) {
 				if (chats.get(i).getId() == roomId) {
 					long clientId = chats.get(i).getClientId();
 					long agentId = chats.get(i).getAgentId();	
-					
+					System.out.println("client id: "+clientId);
+					System.out.println("agent Id: "+clientId);
 					chats.remove(i);
 					
 					getUserInfoByUserId(clientId).setInChat(false);
@@ -202,7 +193,7 @@ public class Server {
 						ChatRoom newRoom = chatWithoutAgent();
 						
 						if (!(null == newRoom)) {
-							addAgentToChatRoom(newRoom, getUserInfoByUserId(agentId));
+							addAgentToChatRoom(newRoom, agentId);
 							//System.out.println("Chat without agent section");
 						}						
 					}			
@@ -238,6 +229,7 @@ public class Server {
 				//IF CHAT WITHOUT AGENT
 				if (room.getAgentId()==0) {
 					room.addTranscriptLine(message);
+					System.out.println("Cannot find agent. Add transcript line");
 				}
 				//SEND MESSAGE TO ANOTHER PARTICIPANT
 				else {
@@ -253,17 +245,20 @@ public class Server {
     			OutputStream output = clientSocket.getOutputStream();
     			PrintWriter writer = new PrintWriter(output, true);
     			writer.println(message+"\\u"+userId+"\\r"+roomId+"\\e");
-    			//System.out.println("Send message to user: "+message+"\\u"+userId+"\\r"+roomId+"\\e");
+    			System.out.println("Send message to userID#"+userId+": "+message+"\\u"+userId+"\\r"+roomId+"\\e");
     			//clientSocket.close();
     		}catch (IOException ex) {
     				System.out.println("Error : "+ex);
     		}
     }
     
-	public ChatRoom createNewChatRoom(long senderId, String message, long newRoomId) {
-		ChatRoom newRoom = new ChatRoom(newRoomId, senderId, message);							
+	public ChatRoom createNewChatRoom(long senderId, String message) {
+		long newRoomId = chatCount.incrementAndGet();
+		UserData data = getUserInfoByUserId(senderId);
+		ChatRoom newRoom = new ChatRoom(newRoomId, senderId, (data.getName() + ": "+message));							
 		chats.add(newRoom);
 		System.out.println(dateFormat.format(new Date())+" - New chat room #"+newRoomId +" has been created");
+		data.setInChat(true);
 		return newRoom;
 	}	
 	
@@ -278,21 +273,22 @@ public class Server {
 		return null;
 	}
 		
-	public void addAgentToChatRoom(ChatRoom newRoom, UserData agent) {
-		
+	public void addAgentToChatRoom(ChatRoom newRoom, Long agentId) {
+			long roomId = newRoom.getId();
+			UserData agent = getUserInfoByUserId(agentId);
 			Socket cs = getUserInfoByUserId(newRoom.getClientId()).getUserSocket();
 			Socket as = agent.getUserSocket();
 			
-			newRoom.setAgentId(agent.getUserId());		
+			newRoom.setAgentId(agentId);		
 			agent.setInChat(true);
 			
-			send(as,"System: New chat has been started.", agent.getUserId(), newRoom.getId());
-			send(cs,"System: Agent "+agent.getName()+" has been connected", newRoom.getClientId(), newRoom.getId());
-			System.out.println(dateFormat.format(new Date())+" - Agent "+agent.getName()+" has been connected to chat #"+newRoom.getId());
+			send(as,"System: New chat has been started.", agentId, roomId);
+			send(cs,"System: Agent "+agent.getName()+" has been connected", newRoom.getClientId(), roomId);
+			System.out.println(dateFormat.format(new Date())+" - Agent "+agent.getName()+" has been connected to chat #"+roomId);
 			
 			//SEND CLIENT MESSAGES TO AGENT																						
 			for (String transcriptLine: newRoom.getTranscript()) {											
-				send(as,transcriptLine, newRoom.getAgentId(), newRoom.getId());
+				send(as,transcriptLine, agentId, roomId);
 			}					
 	}
 	
@@ -321,5 +317,23 @@ public class Server {
 			return info;
 		}
 		return null;
+	}
+
+	public long registerUser(Socket userSocket, String name, boolean isAgent) {	
+		long userId = userCount.incrementAndGet();
+		users.add(new UserData(userSocket, name, userId, isAgent));
+		String clientType = "Client";
+		if(isAgent) {
+			clientType = "Agent";
+		}
+		System.out.println(dateFormat.format(new Date())+" - User "+name+" is connected as "+clientType+". UserId: "+userId );
+		return userId;
+	}
+
+	public Vector<UserData> getUsers() {
+		return users;
+	}
+	public Vector <ChatRoom> getRooms(){
+		return chats;
 	}
 }
